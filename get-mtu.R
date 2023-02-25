@@ -36,3 +36,23 @@ erg
 
 # TODO: pagination if there are more search results
   
+
+
+##### rvest all pages:
+test_url <- "https://mtuaero.dvinci-easy.com/de/jobs/1892/praktikant-qualitatssicherung-all-genders"
+
+for (job_url in erg$url) {
+  print(job_url)
+  job_text <- read_html(job_url) |> html_elements("body") |> html_text2()
+  print(job_text)
+  erg[url == job_url, job_text_col := job_text]
+  daten_hit = job_text |> tolower() |> stringi::stri_extract_all_coll(pattern = "daten") |> paste(collapse = ",")
+  erg[url == job_url, daten_hit_col := daten_hit]
+  data_hit = job_text |> tolower() |> stringi::stri_extract_all_coll(pattern = "data") |> paste(collapse = ",")
+  erg[url == job_url, data_hit_col := data_hit]
+}
+
+erg[(daten_hit != "daten" & !is.na(daten_hit)) | !is.na(data_hit), .N]
+127 / 405
+
+saveRDS(erg, "mtu_analytics_data_2023-02-23.rds")
