@@ -10,49 +10,68 @@ remDr <- rsDriver(
   verbose = TRUE,
   chromever = NULL)
 
-url <- "https://www.mtu.de/de/karriere/jobboerse/"
-remDr$client$navigate(url)
-
-consent_button <- remDr$client$findElements(using = "xpath", "//button[starts-with(@class, 'sg-cookie-optin')]")
-consent_button[[1]]$clickElement()
-Sys.sleep(1) # wait for page loading
-
-# send text to input field to refresh job-search
-input_field <- remDr$client$findElement(using = 'css', '[class="form-control ng-pristine ng-untouched ng-valid"]')
-input_field$sendKeysToElement(list("data", key = "enter"))
-
-# get all job-titles that are on the page:
-job_title <- remDr$client$findElements(using = "xpath", '//*[contains(concat( " ", @class, " " ), concat( " ", "dvinci-job-position", " " ))]')
-job_titles <- unlist(lapply(job_title, function(x) {x$getElementText()}))
-
-# get whole page source
-job_list_source <- remDr$client$getPageSource()[[1]] |> read_html()
-urls <- job_list_source |> 
-  html_elements('[class="dvinci-job-position ng-binding"]') |> 
-  html_attr("href")
-
-erg <- data.table(titles = job_titles, url = urls)
-erg
-
-# TODO: pagination if there are more search results
+get_all_jobs <- function(url = "https://www.mtu.de/de/karriere/jobboerse/") {
   
-
-
-##### rvest all pages:
-test_url <- "https://mtuaero.dvinci-easy.com/de/jobs/1892/praktikant-qualitatssicherung-all-genders"
-
-for (job_url in erg$url) {
-  print(job_url)
-  job_text <- read_html(job_url) |> html_elements("body") |> html_text2()
-  print(job_text)
-  erg[url == job_url, job_text_col := job_text]
-  daten_hit = job_text |> tolower() |> stringi::stri_extract_all_coll(pattern = "daten") |> paste(collapse = ",")
-  erg[url == job_url, daten_hit_col := daten_hit]
-  data_hit = job_text |> tolower() |> stringi::stri_extract_all_coll(pattern = "data") |> paste(collapse = ",")
-  erg[url == job_url, data_hit_col := data_hit]
+  remDr$client$navigate(url)
+  
+  consent_button <- remDr$client$findElements(
+    using = "xpath", "//button[starts-with(@class, 'sg-cookie-optin')]")
+  consent_button[[1]]$clickElement()
+  Sys.sleep(1) # wait for page loading
+  
+  # push button until all jobs are showed
+  pagination_button = "startvalue"
+  while (TRUE) {
+    pagination_button <- try(suppressMessages(
+      remDr$client$findElement(using = "css", '[class="dvinci-pagination-button btn btn-default"]')), 
+      silent = T)
+    if (class(pagination_button) != "webElement") {
+      break
+    }
+    pagination_button$clickElement() # expect only one button
+  }
+  
+  # get all job-titles that are on the page:
+  job_title <- remDr$client$findElements(using = "xpath", '//*[contains(concat( " ", @class, " " ), concat( " ", "dvinci-job-position", " " ))]')
+  job_titles <- unlist(lapply(job_title, function(x) {x$getElementText()}))
+  
+  # get whole page source
+  job_list_source <- remDr$client$getPageSource()[[1]] |> read_html()
+  urls <- job_list_source |> 
+    html_elements('[class="dvinci-job-position ng-binding"]') |> 
+    html_attr("href")
+  
+  erg <- data.table(titles = job_titles, url = urls)
+  erg
 }
 
-erg[(daten_hit != "daten" & !is.na(daten_hit)) | !is.na(data_hit), .N]
-127 / 405
 
-saveRDS(erg, "mtu_analytics_data_2023-02-23.rds")
+get_job_texts <- function(urls) {
+  num_urls <- length(urls)
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = num_urls, # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  result <- data.table(url = rep("NA", num_urls), job_text = rep("NA", num_urls))
+  for (idx in seq_along(urls)) {
+    job_text_content <- read_html(urls[idx]) |> html_elements("body") |> html_text2()
+    result[idx, url := urls[idx]]
+    result[idx, job_text := job_text_content]
+    setTxtProgressBar(pb, idx)
+  }
+  close(pb)
+  result
+}
+
+##### rvest all pages:
+myres[, job_text := gsub("Datenschutzerklärung", "CENSORED", job_text, fixed = TRUE)]
+myres[like(job_text, "daten|data", ignore.case = TRUE, fixed = FALSE), ]
+myres[like(job_text, "CENSORED", fixed = TRUE), ]
+
+myres[14, data.table(unlist(strsplit(gsub("\n", " ", job_text), split = c(" ", "\n"), fixed = TRUE)))[V1 %like% "daten", V1]]
+for (row in 1:nrow(myres)) {
+  myres[row, hits := data.table(unlist(strsplit(gsub("\n", " ", job_text), split = " ")))[V1 %ilike% "daten|data", paste(V1, collapse = ",")]]
+}
+
+myre
