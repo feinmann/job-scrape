@@ -83,10 +83,12 @@ remDr <- rsDriver(
   verbose = TRUE,
   chromever = NULL)
 
-my_hits <- remDr |> 
+my_texts <- remDr |> 
   get_all_jobs() |>
-  get_job_texts() |>
-  get_hits("daten|data")
+  get_job_texts()
+
+my_hits <- my_texts |>  
+  get_hits("sap")
 
 require(wordcloud)
 
