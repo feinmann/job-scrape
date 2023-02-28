@@ -5,12 +5,8 @@ library(rvest)
 library(RSelenium)
 library(futile.logger)
 
-remDr <- rsDriver(
-  browser = "firefox", 
-  verbose = TRUE,
-  chromever = NULL)
 
-get_all_jobs <- function(url = "https://www.mtu.de/de/karriere/jobboerse/") {
+get_all_jobs <- function(remDr, url = "https://www.mtu.de/de/karriere/jobboerse/") {
   
   remDr$client$navigate(url)
   
@@ -46,8 +42,8 @@ get_all_jobs <- function(url = "https://www.mtu.de/de/karriere/jobboerse/") {
 }
 
 
-get_job_texts <- function(urls) {
-  num_urls <- length(urls)
+get_job_texts <- function(dt_urls) {
+  num_urls <- length(dt_urls$url)
   pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
                        max = num_urls, # Maximum value of the progress bar
                        style = 3,    # Progress bar style (also available style = 1 and style = 2)
@@ -64,14 +60,34 @@ get_job_texts <- function(urls) {
   result
 }
 
-##### rvest all pages:
-myres[, job_text := gsub("Datenschutzerklärung", "CENSORED", job_text, fixed = TRUE)]
-myres[like(job_text, "daten|data", ignore.case = TRUE, fixed = FALSE), ]
-myres[like(job_text, "CENSORED", fixed = TRUE), ]
 
-myres[14, data.table(unlist(strsplit(gsub("\n", " ", job_text), split = c(" ", "\n"), fixed = TRUE)))[V1 %like% "daten", V1]]
-for (row in 1:nrow(myres)) {
-  myres[row, hits := data.table(unlist(strsplit(gsub("\n", " ", job_text), split = " ")))[V1 %ilike% "daten|data", paste(V1, collapse = ",")]]
+get_hits <- function(myres, keywords) {
+  myres[, job_text := gsub("Datenschutzerklärung", "CENSORED", job_text, fixed = TRUE)]
+  myres[like(job_text, "daten|data", ignore.case = TRUE, fixed = FALSE), ]
+  myres[like(job_text, "CENSORED", fixed = TRUE), ]
+
+  for (row in 1:nrow(myres)) {
+    myres[row, hits := data.table(unlist(strsplit(gsub("\n", " ", job_text), split = " ")))[V1 %ilike% keywords, paste(V1, collapse = ",")]]
+  }
+  
+  myres
 }
 
-myre
+
+
+
+##### main #########################################################################################
+
+remDr <- rsDriver(
+  browser = "firefox", 
+  verbose = TRUE,
+  chromever = NULL)
+
+my_hits <- remDr |> 
+  get_all_jobs() |>
+  get_job_texts() |>
+  get_hits("daten|data")
+
+require(wordcloud)
+
+wordcloud::wordcloud(my_hits[hits != "", hits], min.freq = 2)
