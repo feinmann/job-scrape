@@ -92,7 +92,7 @@ my_hits <- my_texts |>
 
 require(wordcloud)
 
-wordcloud::wordcloud(my_hits[hits != "", .(job_text)], min.freq = 100)
+wordcloud::wordcloud(my_hits[hits != "", job_text], min.freq = 100)
 
 require(stopwords)
 de_stopwords <- data.table(word = stopwords::stopwords("de"))
@@ -102,5 +102,5 @@ relevant_words <- my_hits[hits != "", ] |>
   tidytext::unnest_tokens(words, job_text, format = "html")|>
   dplyr::filter(!words %in% de_stopwords$word)
 
-wordcloud::wordcloud(relevant_words[, .(words)], min.freq = 100) #TODO: remove quotes in wordcloud
+wordcloud::wordcloud(relevant_words[, words], min.freq = 50) #TODO: remove quotes in wordcloud
   
